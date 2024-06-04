@@ -1,10 +1,16 @@
 const { HttpError, ctrlWrapper } = require("../helpers");
 const { Pet } = require("../models/pets");
 
-// const listPets = async (req, res, next) => {
-//   const result = await Pet.find();
-//   res.status(200).json(result);
-// };
+const convertAgeToMonths = (ageString) => {
+  const yearMatch = ageString.match(/(\d+)\s*(?:рік|років|р)/);
+  const monthMatch = ageString.match(/(\d+)\s*місяц(?:ь|ів)?/);
+  console.log("monthMatch", monthMatch);
+
+  const years = yearMatch ? parseInt(yearMatch[1], 10) : 0;
+  const months = monthMatch ? parseInt(monthMatch[1], 10) : 0;
+
+  return years * 12 + months;
+};
 
 const listPets = async (req, res, next) => {
   let { page = 1, limit = 10, sort = "desc" } = req.query;
@@ -24,18 +30,27 @@ const listPets = async (req, res, next) => {
 
   const total = await Pet.countDocuments();
   const skip = (page - 1) * limit;
-  const sortOption = sort === "desc" ? -1 : 1;
-  const result = await Pet.find()
-    .sort({ age: sortOption })
-    .skip(skip)
-    .limit(limit);
+
+  let result = await Pet.find();
+  result = result.map((pet) => ({
+    ...pet._doc,
+    ageInMonths: convertAgeToMonths(pet.age),
+  }));
+
+  result.sort((a, b) =>
+    sort === "desc"
+      ? b.ageInMonths - a.ageInMonths
+      : a.ageInMonths - b.ageInMonths
+  );
+
+  const paginatedResult = result.slice(skip, skip + limit);
 
   res.status(200).json({
     page,
     limit,
     total,
     totalPages: Math.ceil(total / limit),
-    data: result,
+    data: paginatedResult,
   });
 };
 
